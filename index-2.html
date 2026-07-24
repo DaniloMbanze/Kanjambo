@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="pt-MZ">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kanjambo</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&family=Inter:wght@400;600;700&display=swap');
+  * { font-family: 'Inter', sans-serif; }
+  h1, h2, .font-display { font-family: 'Poppins', sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const { useState, useEffect } = React;
+const html = htm.bind(React.createElement);
+
+const CATEGORIES = [
+  { id: "pedreiro", label: "Pedreiro", emoji: "🔨", color: "#157A6E" },
+  { id: "eletricista", label: "Eletricista", emoji: "⚡", color: "#F2A93B" },
+  { id: "canalizador", label: "Canalizador", emoji: "🔧", color: "#3D4E8C" },
+  { id: "costureira", label: "Costureira", emoji: "✂️", color: "#E8604C" },
+  { id: "cabeleireiro", label: "Cabeleireiro / Barbeiro", emoji: "✨", color: "#157A6E" },
+  { id: "explicacoes", label: "Explicações", emoji: "📖", color: "#F2A93B" },
+  { id: "mecanico", label: "Mecânico", emoji: "🚗", color: "#3D4E8C" },
+  { id: "transporte", label: "Transporte", emoji: "🚚", color: "#E8604C" },
+  { id: "faztudo", label: "Faz-tudo", emoji: "⭐", color: "#157A6E" },
+  { id: "outro", label: "Outro", emoji: "•••", color: "#3D4E8C" },
+];
+
+const FEATURE_PLANS = [
+  { id: "7d", label: "7 dias em destaque", price: 50 },
+  { id: "30d", label: "30 dias em destaque", price: 150 },
+];
+
+const OWNER_PAYMENT_NUMBER = "84 551 1696";
+const OWNER_PASSWORD = "kanjambo2026";
+
+// ---- Firebase ----
+const firebaseConfig = {
+  apiKey: "AIzaSyCmgsa5S0EZ6ViMc_mAs3hYazGjR7k4FsQ",
+  authDomain: "kanjambo-133a8.firebaseapp.com",
+  projectId: "kanjambo-133a8",
+  storageBucket: "kanjambo-133a8.firebasestorage.app",
+  messagingSenderId: "137997691047",
+  appId: "1:137997691047:web:1d39266f63049528dd1382"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const providersCol = db.collection("providers");
+const requestsCol = db.collection("requests");
+const metaDoc = db.collection("meta").doc("revenue");
+
+function catInfo(id) {
+  return CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+}
+
+function buildWhatsAppLink(phone, message) {
+  const digits = phone.replace(/\D/g, "");
+  const withCountry = digits.startsWith("258") ? digits : ("258" + digits.replace(/^0+/, ""));
+  return "https://wa.me/" + withCountry + "?text=" + encodeURIComponent(message);
+}
+
+function CapulanaStrip() {
+  return html`<div aria-hidden="true" style=${{ height: 14, backgroundImage:
+    "repeating-linear-gradient(45deg, #F2A93B 0 10px, #E8604C 10px 20px, #157A6E 20px 30px, #3D4E8C 30px 40px)" }} />`;
+}
+
+function ProviderCard({ p, onFeatureClick }) {
+  const cat = catInfo(p.category);
+  const waMsg = "Olá " + p.name + ", vi o seu serviço no Kanjambo e gostava de saber mais.";
+  return html`
+    <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-3"
+      style=${p.featured ? { border: "2px solid #F2A93B" } : { border: "1px solid #F3F4F6" }}>
+      ${p.featured ? html`
+        <div className="flex items-center gap-1.5 text-xs font-extrabold text-[#B9790C] -mt-1 -mx-1">
+          👑 EM DESTAQUE
+        </div>` : null}
+      <div className="flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-lg"
+          style=${{ backgroundColor: cat.color + "1A" }}>${cat.emoji}</div>
+        <div>
+          <h3 className="font-extrabold text-[#17213B] leading-tight">${p.name}</h3>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full inline-block mt-1"
+            style=${{ backgroundColor: cat.color + "1A", color: cat.color }}>${cat.label}</span>
+        </div>
+      </div>
+      <p className="text-sm text-gray-600">📍 ${p.location}</p>
+      ${p.description ? html`<p className="text-sm text-gray-700">${p.description}</p>` : null}
+      <div className="flex gap-2">
+        <a href=${buildWhatsAppLink(p.phone, waMsg)} target="_blank" rel="noopener noreferrer"
+          className="flex-1 inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1fb855] text-white font-bold py-2.5 rounded-xl">
+          💬 WhatsApp
+        </a>
+        ${!p.featured ? html`
+          <button onClick=${() => onFeatureClick(p)}
+            className="inline-flex items-center justify-center gap-1.5 border-2 border-[#F2A93B] text-[#B9790C] font-bold px-3 rounded-xl text-sm">
+            👑 Destacar
+          </button>` : null}
+      </div>
+    </div>
+  `;
+}
+
+function FeatureModal({ provider, onClose, onSubmitRequest }) {
+  const [mode, setMode] = useState(null);
+  const [plan, setPlan] = useState(FEATURE_PLANS[0].id);
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const selectedPlan = FEATURE_PLANS.find((pl) => pl.id === plan);
+
+  const submitManual = () => {
+    setSubmitting(true);
+    onSubmitRequest(provider, selectedPlan, note).then(() => {
+      setSubmitting(false);
+      setDone(true);
+    });
+  };
+
+  return html`
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+        ${!done ? html`
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-extrabold text-[#17213B]">Destacar anúncio</h2>
+            <button onClick=${onClose} className="p-1 text-gray-400">✕</button>
+          </div>` : null}
+        ${done ? html`
+          <div className="py-8 flex flex-col items-center gap-3">
+            <div className="text-4xl">✅</div>
+            <p className="font-extrabold text-[#17213B] text-center">Pedido enviado!</p>
+            <p className="text-sm text-gray-500 text-center">
+              Assim que o pagamento for confirmado, o anúncio de ${provider.name} entra em destaque.
+            </p>
+            <button onClick=${onClose} className="mt-2 text-sm font-bold text-[#17213B] underline">Fechar</button>
+          </div>
+        ` : !mode ? html`
+          <p className="text-sm text-gray-500 mb-4">
+            Escolhe como ${provider.name} vai pagar para aparecer no topo de "${catInfo(provider.category).label}".
+          </p>
+          <div className="flex flex-col gap-2 mb-5">
+            ${FEATURE_PLANS.map((pl) => html`
+              <label key=${pl.id} className="flex items-center justify-between border-2 rounded-xl px-4 py-3 cursor-pointer"
+                style=${{ borderColor: plan === pl.id ? "#F2A93B" : "#E5E7EB" }}>
+                <span className="flex items-center gap-2 font-semibold text-[#17213B]">
+                  <input type="radio" name="plan" checked=${plan === pl.id} onChange=${() => setPlan(pl.id)} />
+                  ${pl.label}
+                </span>
+                <span className="font-extrabold text-[#17213B]">${pl.price} MT</span>
+              </label>
+            `)}
+          </div>
+          <div className="flex flex-col gap-2">
+            <button onClick=${() => setMode("manual")}
+              className="w-full bg-[#17213B] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+              📱 Transferir e enviar comprovativo
+            </button>
+            <button disabled className="w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl cursor-not-allowed">
+              Pagar automático (em breve)
+            </button>
+          </div>
+        ` : html`
+          <p className="text-sm text-gray-500 mb-4">
+            Transfere <span className="font-extrabold text-[#17213B]">${selectedPlan.price} MT</span> via
+            M-Pesa/e-Mola para o número abaixo e descreve o comprovativo.
+          </p>
+          <div className="bg-[#F1F7F5] rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+            <span className="font-extrabold text-[#17213B] text-lg">${OWNER_PAYMENT_NUMBER}</span>
+            <span className="text-xs font-bold text-[#157A6E] bg-[#157A6E]/10 px-2 py-1 rounded-full">M-Pesa / e-Mola</span>
+          </div>
+          <label className="text-sm font-semibold text-gray-700">Referência ou nota do comprovativo</label>
+          <textarea value=${note} onChange=${(e) => setNote(e.target.value)}
+            placeholder="Ex: Transferido às 14h32, referência 8X4T2..." rows="2"
+            className="mt-1 mb-4 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"></textarea>
+          <button onClick=${submitManual} disabled=${submitting}
+            className="w-full bg-[#17213B] text-white font-bold py-3 rounded-xl disabled:opacity-60">
+            ${submitting ? "A enviar..." : "Já transferi, enviar pedido"}
+          </button>
+          <p className="text-xs text-gray-400 mt-3 text-center">
+            O anúncio só fica em destaque depois do dono confirmar o pagamento no painel dele.
+          </p>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function AddProviderForm({ onClose, onAdd }) {
+  const [form, setForm] = useState({ name: "", category: CATEGORIES[0].id, location: "", phone: "", description: "" });
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const update = (field) => (e) => setForm((f) => Object.assign({}, f, { [field]: e.target.value }));
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.location.trim() || !form.phone.trim()) {
+      setError("Preenche nome, localização e WhatsApp.");
+      return;
+    }
+    setSubmitting(true);
+    onAdd(form).finally(() => setSubmitting(false));
+  };
+
+  return html`
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-extrabold text-[#17213B]">Anuncia o teu serviço</h2>
+          <button onClick=${onClose} className="p-1 text-gray-400">✕</button>
+        </div>
+        <form onSubmit=${submit} className="flex flex-col gap-4">
+          <div>
+            <label className="text-sm font-semibold text-gray-700">Nome</label>
+            <input value=${form.name} onChange=${update("name")} placeholder="Ex: Joaquim Massingue"
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5" />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-gray-700">Categoria</label>
+            <select value=${form.category} onChange=${update("category")}
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white">
+              ${CATEGORIES.map((c) => html`<option key=${c.id} value=${c.id}>${c.label}</option>`)}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-gray-700">Bairro / Cidade</label>
+            <input value=${form.location} onChange=${update("location")} placeholder="Ex: Matola, Malhampsene"
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5" />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-gray-700">Número de WhatsApp</label>
+            <input value=${form.phone} onChange=${update("phone")} placeholder="Ex: 84 123 4567"
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5" />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-gray-700">Descrição curta (opcional)</label>
+            <textarea value=${form.description} onChange=${update("description")}
+              placeholder="Ex: 8 anos de experiência, orçamento grátis" rows="2"
+              className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5"></textarea>
+          </div>
+          ${error ? html`<p className="text-sm text-[#E8604C] font-semibold">${error}</p>` : null}
+          <button type="submit" disabled=${submitting} className="bg-[#17213B] text-white font-bold py-3 rounded-xl disabled:opacity-60">
+            ${submitting ? "A publicar..." : "Publicar anúncio"}
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function OwnerPanel({ onClose, requests, providers, onApprove, onReject }) {
+  const [authed, setAuthed] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const login = (e) => {
+    e.preventDefault();
+    if (password === OWNER_PASSWORD) { setAuthed(true); setError(""); }
+    else setError("Senha incorreta.");
+  };
+
+  const pending = requests.filter((r) => r.status === "pending");
+  const resolved = requests.filter((r) => r.status !== "pending").slice(0, 8);
+  const providerName = (id) => {
+    const found = providers.find((p) => p.id === id);
+    return found ? found.name : "Prestador removido";
+  };
+
+  return html`
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-extrabold text-[#17213B]">🔒 Painel do dono</h2>
+          <button onClick=${onClose} className="p-1 text-gray-400">✕</button>
+        </div>
+        ${!authed ? html`
+          <form onSubmit=${login} className="flex flex-col gap-3">
+            <label className="text-sm font-semibold text-gray-700">Senha do painel</label>
+            <input type="password" value=${password} onChange=${(e) => setPassword(e.target.value)}
+              className="border border-gray-200 rounded-xl px-3 py-2.5" autoFocus />
+            ${error ? html`<p className="text-sm text-[#E8604C] font-semibold">${error}</p>` : null}
+            <button type="submit" className="bg-[#17213B] text-white font-bold py-3 rounded-xl">Entrar</button>
+          </form>
+        ` : html`
+          <h3 className="text-sm font-extrabold text-gray-500 uppercase mb-2">Pedidos pendentes (${pending.length})</h3>
+          ${pending.length === 0 ? html`
+            <p className="text-sm text-gray-400 mb-5">Nenhum pedido de destaque à espera.</p>
+          ` : html`
+            <div className="flex flex-col gap-3 mb-5">
+              ${pending.map((r) => html`
+                <div key=${r.id} className="border border-gray-200 rounded-xl p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#17213B]">${providerName(r.providerId)}</span>
+                    <span className="text-xs font-bold text-[#F2A93B]">${r.plan.price} MT</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">${r.plan.label}</p>
+                  ${r.note ? html`<p className="text-xs text-gray-600 mt-1 italic">"${r.note}"</p>` : null}
+                  <div className="flex gap-2 mt-3">
+                    <button onClick=${() => onApprove(r.id)}
+                      className="flex-1 bg-[#157A6E] text-white text-sm font-bold py-2 rounded-lg">👍 Confirmar pagamento</button>
+                    <button onClick=${() => onReject(r.id)}
+                      className="px-3 bg-gray-100 text-gray-600 text-sm font-bold py-2 rounded-lg">👎</button>
+                  </div>
+                </div>
+              `)}
+            </div>
+          `}
+          ${resolved.length > 0 ? html`
+            <h3 className="text-sm font-extrabold text-gray-400 uppercase mb-2">Histórico recente</h3>
+            <div className="flex flex-col gap-1.5">
+              ${resolved.map((r) => html`
+                <div key=${r.id} className="flex items-center justify-between text-xs text-gray-500">
+                  <span>${providerName(r.providerId)} · ${r.plan.label}</span>
+                  <span className=${r.status === "approved" ? "text-[#157A6E] font-bold" : "text-gray-400"}>
+                    ${r.status === "approved" ? "Aprovado" : "Rejeitado"}
+                  </span>
+                </div>
+              `)}
+            </div>
+          ` : null}
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function Kanjambo() {
+  const [providers, setProviders] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [filterCategory, setFilterCategory] = useState(null);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+  const [revenue, setRevenue] = useState(0);
+  const [featuringProvider, setFeaturingProvider] = useState(null);
+  const [showOwnerPanel, setShowOwnerPanel] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubProviders = providersCol.orderBy("createdAt", "desc").onSnapshot((snap) => {
+      setProviders(snap.docs.map((d) => Object.assign({ id: d.id }, d.data())));
+      setLoading(false);
+    });
+    const unsubRequests = requestsCol.orderBy("createdAt", "desc").onSnapshot((snap) => {
+      setRequests(snap.docs.map((d) => Object.assign({ id: d.id }, d.data())));
+    });
+    const unsubRevenue = metaDoc.onSnapshot((doc) => {
+      if (doc.exists) setRevenue(doc.data().total || 0);
+    });
+    return () => { unsubProviders(); unsubRequests(); unsubRevenue(); };
+  }, []);
+
+  const handleAdd = (form) => {
+    return providersCol.add(Object.assign({}, form, {
+      featured: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    })).then(() => {
+      setShowForm(false);
+      setJustAdded(true);
+      setTimeout(() => setJustAdded(false), 3500);
+    });
+  };
+
+  const handleSubmitRequest = (provider, plan, note) => {
+    return requestsCol.add({
+      providerId: provider.id,
+      plan: plan,
+      note: note,
+      status: "pending",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  };
+
+  const handleApprove = (requestId) => {
+    const request = requests.find((r) => r.id === requestId);
+    if (!request) return;
+    providersCol.doc(request.providerId).update({ featured: true, featuredPlan: request.plan.label });
+    metaDoc.set({ total: firebase.firestore.FieldValue.increment(request.plan.price) }, { merge: true });
+    requestsCol.doc(requestId).update({ status: "approved" });
+  };
+
+  const handleReject = (requestId) => {
+    requestsCol.doc(requestId).update({ status: "rejected" });
+  };
+
+  const sorted = providers.slice().sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+  const filtered = sorted.filter((p) => {
+    const matchesCategory = !filterCategory || p.category === filterCategory;
+    const matchesLocation = !locationQuery.trim() || p.location.toLowerCase().includes(locationQuery.trim().toLowerCase());
+    return matchesCategory && matchesLocation;
+  });
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+
+  return html`
+    <div className="min-h-screen" style=${{ backgroundColor: "#F1F7F5" }}>
+      <header style=${{ backgroundColor: "#17213B" }} className="px-5 pt-8 pb-6 relative">
+        <button onClick=${() => setShowOwnerPanel(true)} className="absolute top-6 right-5 text-[#AEB9D6] p-2">
+          🔒
+          ${pendingCount > 0 ? html`
+            <span className="absolute -top-0.5 -right-0.5 bg-[#E8604C] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">${pendingCount}</span>
+          ` : null}
+        </button>
+        <h1 className="font-display text-3xl font-extrabold text-white tracking-tight">Kanjambo</h1>
+        <p className="text-[#AEB9D6] mt-1 text-sm font-medium">Encontra quem faz. Aqui em Moçambique.</p>
+        <div className="flex gap-4 mt-4 text-xs text-[#AEB9D6] font-semibold">
+          <span>${providers.length} anúncio${providers.length !== 1 ? "s" : ""}</span>
+          <span>${providers.filter((p) => p.featured).length} em destaque</span>
+          <span className="text-[#F2A93B]">${revenue} MT em receita real confirmada</span>
+        </div>
+      </header>
+      <${CapulanaStrip} />
+      <main className="px-4 pb-28 max-w-2xl mx-auto">
+        <div className="-mt-1 pt-5">
+          <div className="bg-white rounded-2xl shadow-sm p-3 flex flex-col gap-3">
+            <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2">
+              📍
+              <input value=${locationQuery} onChange=${(e) => setLocationQuery(e.target.value)}
+                placeholder="Procura por bairro ou cidade..." className="w-full focus:outline-none text-sm" />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              <button onClick=${() => setFilterCategory(null)}
+                className=${"shrink-0 text-xs font-bold px-3 py-2 rounded-full border " + (!filterCategory ? "bg-[#17213B] text-white border-[#17213B]" : "bg-white text-gray-600 border-gray-200")}>
+                Tudo
+              </button>
+              ${CATEGORIES.map((c) => {
+                const active = filterCategory === c.id;
+                return html`
+                  <button key=${c.id} onClick=${() => setFilterCategory(active ? null : c.id)}
+                    className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full border"
+                    style=${active ? { backgroundColor: c.color, borderColor: c.color, color: "white" } : { backgroundColor: "white", borderColor: "#E5E7EB", color: "#4B5563" }}>
+                    ${c.emoji} ${c.label}
+                  </button>
+                `;
+              })}
+            </div>
+          </div>
+        </div>
+        ${justAdded ? html`
+          <div className="mt-4 bg-[#157A6E]/10 border border-[#157A6E]/30 text-[#0E5A50] text-sm font-semibold rounded-xl px-4 py-3">
+            Anúncio publicado! Já aparece na lista abaixo.
+          </div>
+        ` : null}
+        <section className="mt-5 flex flex-col gap-3">
+          ${loading ? html`
+            <div className="text-center py-14 text-gray-400 text-sm">A carregar anúncios...</div>
+          ` : filtered.length === 0 ? html`
+            <div className="text-center py-14 bg-white rounded-2xl border border-dashed border-gray-200">
+              <div className="text-3xl mb-3">🔍</div>
+              <p className="font-bold text-[#17213B]">${providers.length === 0 ? "Ainda não há prestadores aqui" : "Nada encontrado com esse filtro"}</p>
+              <p className="text-sm text-gray-500 mt-1 px-6">${providers.length === 0 ? "Sê o primeiro a anunciar o teu serviço." : "Tenta outra categoria ou outro bairro."}</p>
+              ${providers.length === 0 ? html`
+                <button onClick=${() => setShowForm(true)} className="mt-4 inline-flex items-center gap-2 bg-[#17213B] text-white font-bold px-5 py-2.5 rounded-xl">
+                  + Anunciar o meu serviço
+                </button>
+              ` : null}
+            </div>
+          ` : filtered.map((p) => html`<${ProviderCard} key=${p.id} p=${p} onFeatureClick=${setFeaturingProvider} />`)}
+        </section>
+      </main>
+      <button onClick=${() => setShowForm(true)}
+        className="fixed bottom-6 right-6 bg-[#E8604C] text-white rounded-full pl-4 pr-5 py-3.5 flex items-center gap-2 shadow-lg font-bold">
+        + Anunciar
+      </button>
+      ${showForm ? html`<${AddProviderForm} onClose=${() => setShowForm(false)} onAdd=${handleAdd} />` : null}
+      ${featuringProvider ? html`<${FeatureModal} provider=${featuringProvider} onClose=${() => setFeaturingProvider(null)} onSubmitRequest=${handleSubmitRequest} />` : null}
+      ${showOwnerPanel ? html`<${OwnerPanel} onClose=${() => setShowOwnerPanel(false)} requests=${requests} providers=${providers} onApprove=${handleApprove} onReject=${handleReject} />` : null}
+    </div>
+  `;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${Kanjambo} />`);
+</script>
+</body>
+</html>
